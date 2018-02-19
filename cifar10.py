@@ -74,7 +74,6 @@ def next_batch(i, size, data, label):
 
     return x_data, y_data
 
-
 #train
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
@@ -85,18 +84,17 @@ with tf.Session() as sess:
             
             batch_xs, batch_ys = next_batch(step, batch_size, x_train, y_train_one_hot.eval())
             h, l, _ = sess.run([accuracy, loss, optimizer], feed_dict={X:batch_xs, Y:batch_ys, dropout_rate:0.7})
-            print 'step : ', step,  'cost : ', l, 'accuracy : ', h
 
-        print 'epoch : %04d' %(epoch+1), 'cost : ', l, 'accuracy : ', accuracy.eval(feed_dict={X:batch_xs, Y:batch_ys, dropout_rate:1})
+        print 'epoch : %04d / ' %(epoch+1), train_epoch, ' cost : ', l, ' accuracy : ', accuracy.eval(feed_dict={X:batch_xs, Y:batch_ys, dropout_rate:1})
+        f_a = 0.
+        for i in range(10):
+            batch_xs, batch_ys = next_batch(i, 1000, x_test, y_test_one_hot.eval())
+            a = accuracy.eval(feed_dict={X:batch_xs, Y:batch_ys, dropout_rate:1.0})
+            f_a += a
 
-    
-    #test
-    f_a = 0.
-    for i in range(10):
-        batch_xs, batch_ys = next_batch(i, 1000, x_test, y_test_one_hot.eval())
-        a = accuracy.eval(feed_dict={X:batch_xs, Y:batch_ys, dropout_rate:1.0})
-        f_a += a
-        print 'accuracy : ', a
+        print 'final accuracy : ', f_a/10
 
-    print 'final accuracy : ', f_a/10
-    #43%
+# train accuracy : above 85%
+# test accuracy  : about 55%
+#
+# need to avoid overfitting
