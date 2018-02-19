@@ -41,30 +41,34 @@ L4 = tf.nn.relu(L4)
 L4 = tf.nn.max_pool(L4, ksize=[1, 2, 2, 1], strides = [1, 2, 2, 1], padding='SAME')
 #L4.shape=[None, 4, 4, 384]
 
+dropout_rate = tf.placeholder(tf.float32)
+
 #FC1
 L4 = tf.reshape(L4, [-1, 4*4*384])
-W5 = tf.Variable(tf.random_normal([4*4*384, 384]))
-b5 = tf.Variable(tf.random_normal([384]))
+W5 = tf.get_variable("W5", [4*4*384, 384], initializer=tf.contrib.layers.xavier_initializer())
+b5 = tf.Variable(tf.zeros([384]), tf.float32)
 L5 = tf.nn.relu(tf.matmul(L4, W5) + b5)
+L5_drop = tf.nn.dropout(L5, dropout_rate)
 
 #FC2
-W6 = tf.Variable(tf.random_normal([384, 384]))
-b6 = tf.Variable(tf.random_normal([384]))
-L6 = tf.nn.relu(tf.matmul(L5,W6) + b6)
+W6 = tf.get_variable("W6", [384, 384], initializer=tf.contrib.layers.xavier_initializer())
+b6 = tf.Variable(tf.zeros([384]), tf.float32)
+L6 = tf.nn.relu(tf.matmul(L5_drop,W6) + b6)
+L6_drop = tf.nn.dropout(L6, dropout_rate)
 
 #FC3
-W7 = tf.Variable(tf.random_normal([384, 10]))
-b7 = tf.Variable(tf.random_normal([10]))
+W7 = tf.get_variable("W7", [384, 10], initializer=tf.contrib.layers.xavier_initializer())
+b7 = tf.Variable(tf.zeros([10]), tf.float32)
 
-hypothesis = tf.matmul(L6,W7) + b7
-loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=hypothesis, labels=Y))
+hypothesis = tf.matmul(L6_drop,W7) + b7
+loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=hypothesis, labels=Y))
 
 optimizer = tf.train.AdamOptimizer(learning_rate = 0.001).minimize(loss)
 
 correct_prediction = tf.equal(tf.argmax(hypothesis, 1), tf.argmax(Y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
-train_epoch = 15
+train_epoch = 15 
 train_size = 50000
 batch_size  = 100
 
@@ -85,23 +89,19 @@ with tf.Session() as sess:
         for step in range(train_size/batch_size):
             
             batch_xs, batch_ys = next_batch(step, batch_size, x_train, y_train_one_hot.eval())
-            h, l, _ = sess.run([accuracy, loss, optimizer], feed_dict={X:batch_xs, Y:batch_ys})
-            if step%10 == 0:
-                print 'step : ', step, 'accuracy : ', h
+            h, l, _ = sess.run([accuracy, loss, optimizer], feed_dict={X:batch_xs, Y:batch_ys, dropout_rate:1.0})
+            print 'step : ', step, 'accuracy : ', h
 
-        print 'epoch : %04d' %(epoch+1), 'cost : ', l, 'accuracy : ', accuracy.eval(feed_dict={X:batch_xs, Y:batch_ys})
+        print 'epoch : %04d' %(epoch+1), 'cost : ', l, 'accuracy : ', accuracy.eval(feed_dict={X:batch_xs, Y:batch_ys, dropout_rate:0.7})
 
-    #sample
-    rand = random.randrange(0, 10000)
     
-    test_xs = x_test[rand, :]
-    test_ys = int(y_test[rand, :])
-        
-    h = tf.squeeze(sess.run(hypothesis, feed_dict={X:[test_xs]}))
-    p = tf.argmax(h, axis = 0)
-    p = tf.cast(p, tf.int32)
-    print 'predicted : ', labels[p.eval()] 
-    print 'answer : ', labels[test_ys]
+    #test
+    f_a = 0.
+    for i in range(10):
+        batch_xs, batch_ys = next_batch(i, 1000, x_test, y_test_one_hot.eval())
+        a = accuracy.eval(feed_dict={X:batch_xs, Y:batch_ys, dropout:1.0})
+        f_a += a
+        print 'accuracy : ', a
 
-    plt.imshow(test_xs)
-    plt.show()
+    print 'final accuracy : ', f_a/10
+    #43%
