@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import random
-import matplotlib.pyplot as plt
+import time
 from progress.bar import Bar
 
 #load cifar10 datasets
@@ -21,11 +21,11 @@ def convolution2d(x, w):
 
 class inception():
     def __init__(self, x, c, vol):
-        self.wa = filter(1, 1, c, vol/4)
-        self.wb = filter(1, 1, c, vol/8)
-        self.wc = filter(3, 3, vol/8, vol/2)
-        self.wd = filter(1, 1, c, vol/4)
-        
+        self.wa = filter(1, 1, c, int(vol/4))
+        self.wb = filter(1, 1, c, int(vol/8))
+        self.wc = filter(3, 3, int(vol/8), int(vol/2))
+        self.wd = filter(1, 1, c, int(vol/4))
+
         self.conva = convolution2d(x, self.wa)
         self.convb = convolution2d(x, self.wb)
         self.convc = convolution2d(self.convb, self.wc)
@@ -63,6 +63,7 @@ w7 = tf.Variable(tf.random_normal([2*2*256, 256], stddev = 0.01))
 b7 = tf.Variable(tf.random_normal([256], stddev = 0.01))
 fc1 = tf.nn.relu(tf.matmul(conv6_flat, w7) + b7)
 
+#fc2
 w8 = tf.Variable(tf.random_normal([256, 256], stddev = 0.01))
 b8 = tf.Variable(tf.random_normal([256], stddev = 0.01))
 fc2 = tf.nn.relu(tf.matmul(fc1, w8) + b8)
@@ -81,7 +82,8 @@ accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
 train_epoch = 300 
 train_size = 50000
-batch_size  = 50 
+test_size = 10000
+batch_size  = 500
 
 def next_batch(num, batch_size, x, y):
 	x_data = x[num*batch_size:num*batch_size+batch_size, :]
@@ -89,28 +91,31 @@ def next_batch(num, batch_size, x, y):
 
 	return x_data, y_data
 
-gen = tf.keras.preprocessing.image.ImageDataGenerator(width_shift_range=0.1, height_shift_range=0.1, horizontal_flip=True)
-batch = gen.flow(x_train, y_train, batch_size = batch_size, shuffle=False)
-
 #train
 with tf.Session() as sess:
-    sess.run(tf.global_variables_initializer())
-	
-    for epoch in range(train_epoch):
-        l = 0
-        bar = Bar('Processing', max = train_size/batch_size)
-        for step in range(train_size/batch_size):
-			batch_xs = batch[step][0]
-			batch_ys = tf.squeeze(tf.one_hot(batch[step][1], 10, axis = 1))
-			l, _ = sess.run([loss, optimizer], feed_dict={X:batch_xs, Y:batch_ys.eval()})
+	sess.run(tf.global_variables_initializer())
+    
+	gen = tf.keras.preprocessing.image.ImageDataGenerator(width_shift_range=0.1, height_shift_range=0.1, horizontal_flip=True)
+	aug_data = gen.flow(x_train, y_train, batch_size = batch_size, shuffle=False)
+	aug_data.y = tf.squeeze(tf.one_hot(aug_data.y, 10, axis = 1)).eval()
+    
+	for epoch in range(train_epoch):
+		l = 0
+		start_time = time.time()
+		bar = Bar("Processing", max = train_size/batch_size)
+		for step in range(int(train_size/batch_size)):
+			batch_train_x = aug_data[step][0]
+			batch_train_y = aug_data[step][1]
+			l, _ = sess.run([loss, optimizer], feed_dict={X:batch_train_x, Y:batch_train_y})
 			bar.next()
-            
-        bar.finish()
-        print 'epoch : %02d / %02d ' %((epoch+1), train_epoch), 'cost : ', l, 'train accuracy : ', accuracy.eval(feed_dict={X:batch_xs, Y:batch_ys.eval()})
-        f_a = 0.
-        for i in range(100):
-            batch_test_x, batch_test_y = next_batch(i, 100, x_test, y_test_one_hot.eval())
-            a = accuracy.eval(feed_dict={X:batch_test_x, Y:batch_test_y})
-            f_a += a
+		bar.finish()
+		print("epoch : %02d / %02d"%((epoch+1), train_epoch), "cost : ", l, "train accuracy : ", accuracy.eval(feed_dict={X:batch_train_x, Y:batch_train_y}), "time : %.2f"%(time.time()-start_time))
+        
+		test_accuracy = 0.
+		num_iter = int(test_size/batch_size)
+		for step in range(num_iter):
+			batch_test_x, batch_test_y = next_batch(step, batch_size, x_test, y_test_one_hot.eval())
+			a = accuracy.eval(feed_dict={X:batch_test_x, Y:batch_test_y})
+			test_accuracy += a
 
-        print 'test accuracy : ', f_a/100
+		print("test accuracy : %.2f"%(a/num_iter))
